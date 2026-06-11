@@ -1,0 +1,733 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Threadstorm – Support</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet"/>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg-deep:    #0a0a12;
+      --bg-panel:   #12121e;
+      --bg-card:    #1a1a2e;
+      --border:     #2a2a42;
+      --pink:       #ff4da6;
+      --pink-dim:   rgba(255,77,166,.15);
+      --gold:       #f5c842;
+      --gold-dim:   rgba(245,200,66,.12);
+      --text:       #e8e0d4;
+      --text-muted: #8a8399;
+      --green:      #39e75f;
+      --red:        #ff4d4d;
+      --yellow:     #ffd166;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg-deep);
+      color: var(--text);
+      min-height: 100vh;
+      position: relative;
+      overflow-x: hidden;
+    }
+
+    /* ── Scanline + noise overlay ── */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 999;
+      background-image:
+        repeating-linear-gradient(
+          0deg,
+          transparent,
+          transparent 2px,
+          rgba(0,0,0,.08) 2px,
+          rgba(0,0,0,.08) 4px
+        );
+    }
+
+    /* ── Background smoke blobs ── */
+    .bg-blob {
+      position: fixed;
+      border-radius: 50%;
+      filter: blur(120px);
+      opacity: .18;
+      pointer-events: none;
+      z-index: 0;
+    }
+    .blob-1 { width: 600px; height: 600px; background: var(--pink); top: -200px; left: -150px; }
+    .blob-2 { width: 500px; height: 500px; background: var(--gold); bottom: -150px; right: -100px; }
+    .blob-3 { width: 400px; height: 400px; background: #3a1aff; top: 40%; left: 40%; }
+
+    /* ── Layout wrapper ── */
+    .page { position: relative; z-index: 1; }
+
+    /* ════════════════════════════════
+       SERVER STATUS PANEL
+    ════════════════════════════════ */
+    .server-status-panel {
+      width: 100%;
+      background: #0e0e18;
+      border-bottom: 1px solid var(--border);
+      padding: 10px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px 28px;
+      flex-wrap: wrap;
+      font-size: .78rem;
+      letter-spacing: .04em;
+      font-family: 'Rajdhani', sans-serif;
+      font-weight: 600;
+      min-height: 38px;
+    }
+
+    .status-item {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      color: var(--text-muted);
+    }
+    .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      display: inline-block;
+      flex-shrink: 0;
+      transition: background .4s, box-shadow .4s;
+    }
+    .dot.green  { background: var(--green);  box-shadow: 0 0 6px var(--green); }
+    .dot.yellow { background: var(--yellow); box-shadow: 0 0 6px var(--yellow); animation: pulse-yellow 2s infinite; }
+    .dot.red    { background: var(--red);    box-shadow: 0 0 6px var(--red);    animation: pulse-red 1.4s infinite; }
+    .dot.grey   { background: #444; box-shadow: none; }
+
+    @keyframes pulse-yellow {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: .45; }
+    }
+    @keyframes pulse-red {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: .3; }
+    }
+
+    .status-item .label { color: var(--text); }
+    .status-item .value { color: var(--text-muted); }
+
+    .status-loading {
+      color: var(--text-muted);
+      font-size: .75rem;
+      letter-spacing: .1em;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .spinner {
+      width: 12px; height: 12px;
+      border: 2px solid var(--border);
+      border-top-color: var(--pink);
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+      flex-shrink: 0;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .status-divider {
+      width: 1px; height: 14px;
+      background: var(--border);
+      flex-shrink: 0;
+    }
+    .status-overall {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-weight: 700;
+      letter-spacing: .1em;
+    }
+    .status-overall .label { color: var(--text); }
+    .status-overall.all-ok .label { color: var(--green); }
+    .status-overall.issues   .label { color: var(--yellow); }
+    .status-overall.outage   .label { color: var(--red); }
+
+    /* ════════════════════════════════
+       HEADER / HERO
+    ════════════════════════════════ */
+    header {
+      padding: 56px 24px 48px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      position: relative;
+    }
+
+    .logo-wrap img {
+      height: 130px;
+      max-width: 100%;
+      object-fit: contain;
+      filter: drop-shadow(0 0 28px rgba(255,77,166,.4)) drop-shadow(0 0 60px rgba(245,200,66,.2));
+      transition: filter .3s;
+    }
+    .logo-wrap img:hover {
+      filter: drop-shadow(0 0 36px rgba(255,77,166,.7)) drop-shadow(0 0 80px rgba(245,200,66,.35));
+    }
+
+    .hero-sub {
+      margin-top: 18px;
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 1.15rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+    .hero-sub span {
+      color: var(--pink);
+    }
+
+    /* ════════════════════════════════
+       SECTION SHARED
+    ════════════════════════════════ */
+    main { max-width: 860px; margin: 0 auto; padding: 0 20px 80px; }
+
+    section { margin-bottom: 64px; }
+
+    .section-label {
+      font-family: 'Rajdhani', sans-serif;
+      font-size: .7rem;
+      font-weight: 700;
+      letter-spacing: .22em;
+      text-transform: uppercase;
+      color: var(--pink);
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .section-label::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: linear-gradient(90deg, var(--pink) 0%, transparent 100%);
+      opacity: .4;
+    }
+
+    .section-title {
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 2rem;
+      font-weight: 700;
+      color: var(--text);
+      line-height: 1.1;
+      margin-bottom: 28px;
+    }
+    .section-title .accent { color: var(--gold); }
+
+    /* ════════════════════════════════
+       FAQ ACCORDION
+    ════════════════════════════════ */
+    .faq-list { display: flex; flex-direction: column; gap: 6px; }
+
+    .faq-item {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+      transition: border-color .2s;
+    }
+    .faq-item:focus-within,
+    .faq-item.open {
+      border-color: var(--pink);
+    }
+
+    .faq-btn {
+      width: 100%;
+      background: none;
+      border: none;
+      padding: 18px 22px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      cursor: pointer;
+      text-align: left;
+      color: var(--text);
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 1.05rem;
+      font-weight: 600;
+      letter-spacing: .03em;
+      line-height: 1.3;
+    }
+    .faq-btn:hover { color: var(--gold); }
+    .faq-btn:focus-visible { outline: 2px solid var(--pink); outline-offset: -2px; }
+
+    .faq-icon {
+      flex-shrink: 0;
+      width: 22px; height: 22px;
+      border-radius: 50%;
+      border: 1.5px solid var(--border);
+      display: flex; align-items: center; justify-content: center;
+      font-size: .9rem;
+      color: var(--text-muted);
+      transition: transform .25s, background .2s, color .2s;
+    }
+    .faq-item.open .faq-icon {
+      transform: rotate(45deg);
+      background: var(--pink-dim);
+      color: var(--pink);
+      border-color: var(--pink);
+    }
+
+    .faq-body {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height .3s cubic-bezier(.4,0,.2,1);
+    }
+    .faq-item.open .faq-body { max-height: 600px; }
+
+    .faq-inner {
+      padding: 0 22px 20px;
+      font-size: .92rem;
+      color: var(--text-muted);
+      line-height: 1.7;
+    }
+    .faq-inner a { color: var(--pink); text-decoration: underline; }
+    .faq-inner code {
+      background: rgba(255,255,255,.06);
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      padding: 1px 6px;
+      font-size: .85em;
+      color: var(--gold);
+      font-family: 'Courier New', monospace;
+    }
+    .faq-tag {
+      display: inline-block;
+      font-size: .68rem;
+      font-family: 'Rajdhani', sans-serif;
+      font-weight: 700;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      padding: 2px 8px;
+      border-radius: 3px;
+      margin-right: 8px;
+      vertical-align: middle;
+    }
+    .faq-tag.net  { background: rgba(57,231,95,.12);  color: var(--green); }
+    .faq-tag.sys  { background: rgba(255,77,166,.12); color: var(--pink);  }
+    .faq-tag.perf { background: rgba(245,200,66,.12); color: var(--gold);  }
+
+    /* ════════════════════════════════
+       BUG REPORT
+    ════════════════════════════════ */
+    .bug-steps {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .bug-step {
+      display: flex;
+      gap: 18px;
+      align-items: flex-start;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 20px 22px;
+      transition: border-color .2s;
+    }
+    .bug-step:hover { border-color: var(--gold); }
+
+    .step-num {
+      flex-shrink: 0;
+      width: 36px; height: 36px;
+      border-radius: 4px;
+      background: var(--gold-dim);
+      border: 1px solid rgba(245,200,66,.3);
+      display: flex; align-items: center; justify-content: center;
+      font-family: 'Rajdhani', sans-serif;
+      font-weight: 700;
+      font-size: 1.1rem;
+      color: var(--gold);
+    }
+
+    .step-content h3 {
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 6px;
+      letter-spacing: .03em;
+    }
+    .step-content p {
+      font-size: .88rem;
+      color: var(--text-muted);
+      line-height: 1.6;
+    }
+    .step-content code {
+      display: inline-block;
+      margin-top: 8px;
+      background: rgba(0,0,0,.4);
+      border: 1px solid var(--border);
+      border-left: 2px solid var(--gold);
+      border-radius: 4px;
+      padding: 7px 12px;
+      font-family: 'Courier New', monospace;
+      font-size: .8rem;
+      color: var(--gold);
+      word-break: break-all;
+      width: 100%;
+    }
+
+    .bug-cta {
+      margin-top: 24px;
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+
+    /* ════════════════════════════════
+       BUTTONS
+    ════════════════════════════════ */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
+      padding: 13px 24px;
+      border-radius: 5px;
+      font-family: 'Rajdhani', sans-serif;
+      font-weight: 700;
+      font-size: .95rem;
+      letter-spacing: .07em;
+      text-transform: uppercase;
+      text-decoration: none;
+      border: none;
+      cursor: pointer;
+      transition: transform .15s, box-shadow .2s, filter .2s;
+    }
+    .btn:hover { transform: translateY(-2px); }
+    .btn:active { transform: translateY(0); }
+    .btn:focus-visible { outline: 2px solid var(--pink); outline-offset: 3px; }
+
+    .btn-pink {
+      background: var(--pink);
+      color: #fff;
+      box-shadow: 0 0 18px rgba(255,77,166,.35);
+    }
+    .btn-pink:hover { box-shadow: 0 0 30px rgba(255,77,166,.6); filter: brightness(1.1); }
+
+    .btn-gold {
+      background: var(--gold);
+      color: #0a0a12;
+      box-shadow: 0 0 18px rgba(245,200,66,.3);
+    }
+    .btn-gold:hover { box-shadow: 0 0 30px rgba(245,200,66,.55); filter: brightness(1.1); }
+
+    .btn-outline {
+      background: transparent;
+      color: var(--text);
+      border: 1.5px solid var(--border);
+    }
+    .btn-outline:hover { border-color: var(--pink); color: var(--pink); }
+
+    /* ════════════════════════════════
+       COMMUNITY SECTION
+    ════════════════════════════════ */
+    .community-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+
+    .community-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 28px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      text-align: center;
+      align-items: center;
+      transition: border-color .2s, transform .2s;
+    }
+    .community-card:hover {
+      border-color: var(--pink);
+      transform: translateY(-3px);
+    }
+
+    .card-icon {
+      font-size: 2.2rem;
+      line-height: 1;
+    }
+
+    .community-card h3 {
+      font-family: 'Rajdhani', sans-serif;
+      font-weight: 700;
+      font-size: 1.15rem;
+      letter-spacing: .05em;
+      color: var(--text);
+    }
+    .community-card p {
+      font-size: .85rem;
+      color: var(--text-muted);
+      line-height: 1.55;
+      flex: 1;
+    }
+
+    /* ════════════════════════════════
+       FOOTER
+    ════════════════════════════════ */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 28px 24px;
+      text-align: center;
+      font-size: .78rem;
+      color: var(--text-muted);
+      font-family: 'Rajdhani', sans-serif;
+      letter-spacing: .08em;
+    }
+    footer a { color: var(--pink); text-decoration: none; }
+    footer a:hover { text-decoration: underline; }
+
+    /* ════════════════════════════════
+       RESPONSIVE
+    ════════════════════════════════ */
+    @media (max-width: 600px) {
+      .status-bar { gap: 14px; font-size: .72rem; justify-content: flex-start; overflow-x: auto; }
+      .logo-wrap img { height: 90px; }
+      .section-title { font-size: 1.55rem; }
+      .community-grid { grid-template-columns: 1fr; }
+      .bug-step { flex-direction: column; gap: 10px; }
+      .bug-cta { flex-direction: column; }
+      .btn { width: 100%; justify-content: center; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { transition-duration: 0.01ms !important; }
+      .logo-wrap img:hover { filter: none; }
+    }
+  </style>
+</head>
+<body>
+<div class="bg-blob blob-1"></div>
+<div class="bg-blob blob-2"></div>
+<div class="bg-blob blob-3"></div>
+
+<div class="page">
+
+  <!-- ── SERVER STATUS PANEL ── -->
+  <div id="server-status-panel" class="server-status-panel" aria-label="Server-Status"></div>
+
+  <!-- ── HEADER ── -->
+  <header>
+    <div class="logo-wrap">
+      <img src="1781182788495_image.png" alt="Threadstorm Logo"/>
+    </div>
+    <p class="hero-sub">Support &amp; <span>Hilfezentrum</span></p>
+  </header>
+
+  <!-- ── MAIN CONTENT ── -->
+  <main>
+
+    <!-- ── FAQ ── -->
+    <section id="faq" aria-labelledby="faq-title">
+      <p class="section-label">Hilfe</p>
+      <h2 class="section-title" id="faq-title">Häufige <span class="accent">Fragen</span></h2>
+
+      <div class="faq-list" role="list">
+
+        <!-- Item 1 -->
+        <div class="faq-item" role="listitem">
+          <button class="faq-btn" aria-expanded="false" onclick="toggleFaq(this)">
+            <span><span class="faq-tag net">Netzwerk</span>Ich kann keinem Multiplayer-Match beitreten</span>
+            <div class="faq-icon" aria-hidden="true">+</div>
+          </button>
+          <div class="faq-body" role="region">
+            <div class="faq-inner">
+              <p>Prüfe zunächst deine Firewall-Einstellungen. Threadstorm benötigt offene UDP-Ports <code>7777</code> und <code>7778</code> für die Godot-Netzwerkschicht. Deaktiviere ggf. vorübergehend VPN-Software.</p>
+              <p style="margin-top:10px;">Stelle sicher, dass Steam läuft und du eingeloggt bist – das Matchmaking nutzt die Steam-Relay-Infrastruktur. Bei anhaltenden Problemen prüfe den Verbindungstest unter <strong>Einstellungen → Netzwerk → Diagnose</strong>.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Item 2 -->
+        <div class="faq-item" role="listitem">
+          <button class="faq-btn" aria-expanded="false" onclick="toggleFaq(this)">
+            <span><span class="faq-tag net">Netzwerk</span>Panzer-Positionen sind für andere Spieler unsynced</span>
+            <div class="faq-icon" aria-hidden="true">+</div>
+          </button>
+          <div class="faq-body" role="region">
+            <div class="faq-inner">
+              <p>Synchronisationsfehler entstehen meist durch hohe Latenzen über 150 ms oder Paketverluste. Im Debug-HUD (<code>F3</code> ingame) kannst du dein aktuelles Ping und Jitter ablesen.</p>
+              <p style="margin-top:10px;">Verbinde dich nach Möglichkeit per Ethernet. Bei der Godot High-Level Multiplayer API kann ein <code>network_peer.set_refuse_new_connections(false)</code>-Fehler seltene Phantomzustände erzeugen – melde diesen bitte als Bug.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Item 3 -->
+        <div class="faq-item" role="listitem">
+          <button class="faq-btn" aria-expanded="false" onclick="toggleFaq(this)">
+            <span><span class="faq-tag sys">System</span>Das Spiel startet nicht / bleibt beim Ladescreen hängen</span>
+            <div class="faq-icon" aria-hidden="true">+</div>
+          </button>
+          <div class="faq-body" role="region">
+            <div class="faq-inner">
+              <p>Verifiziere die Spieldateien via Steam: <strong>Rechtsklick auf Threadstorm → Eigenschaften → Lokale Dateien → Integrität prüfen</strong>.</p>
+              <p style="margin-top:10px;">Fehlt eine kompatible OpenGL-Version (Godot benötigt mind. <strong>OpenGL 3.3</strong>), startet das Spiel nicht. Aktualisiere deine Grafiktreiber. Auf AMD-GPUs kann das Deaktivieren von Shader-Cache in den Grafiktreiber-Einstellungen helfen.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Item 4 -->
+        <div class="faq-item" role="listitem">
+          <button class="faq-btn" aria-expanded="false" onclick="toggleFaq(this)">
+            <span><span class="faq-tag perf">Performance</span>Starkes Frame-Dropping und Ruckler</span>
+            <div class="faq-icon" aria-hidden="true">+</div>
+          </button>
+          <div class="faq-body" role="region">
+            <div class="faq-inner">
+              <p>Reduziere die Partikeldichte unter <strong>Einstellungen → Grafik → Effekte</strong>. Threadstorm nutzt Godot's Partikelsystem intensiv für Geschoss- und Explosionseffekte, was auf älteren GPUs zu Einbrüchen führen kann.</p>
+              <p style="margin-top:10px;">Stelle den <strong>Anzeigemodus</strong> auf <em>Vollbild</em> statt Fenster-Modus – das reduziert Compositing-Overhead erheblich.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Item 5 -->
+        <div class="faq-item" role="listitem">
+          <button class="faq-btn" aria-expanded="false" onclick="toggleFaq(this)">
+            <span><span class="faq-tag sys">System</span>Wo finde ich meine Spieler-ID für den Support?</span>
+            <div class="faq-icon" aria-hidden="true">+</div>
+          </button>
+          <div class="faq-body" role="region">
+            <div class="faq-inner">
+              <p>Deine Steam-ID (64-Bit) wird als Spieler-ID verwendet. Sie ist sichtbar unter <strong>Hauptmenü → Profil → Spieler-Informationen</strong> oder über <a href="https://store.steampowered.com/account/" target="_blank" rel="noopener">steamcommunity.com/id/[dein-name]</a>. Bitte immer mitschicken, wenn du ein Ticket erstellst.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Item 6 -->
+        <div class="faq-item" role="listitem">
+          <button class="faq-btn" aria-expanded="false" onclick="toggleFaq(this)">
+            <span><span class="faq-tag sys">System</span>Spielstand / Fortschritt ist nach einem Update weg</span>
+            <div class="faq-icon" aria-hidden="true">+</div>
+          </button>
+          <div class="faq-body" role="region">
+            <div class="faq-inner">
+              <p>Spielstände werden lokal im Godot-User-Daten-Verzeichnis gespeichert. Nach einem Major-Update können inkompatible Formate dazu führen, dass Saves nicht geladen werden. Dein Backup findest du unter:</p>
+              <code>%APPDATA%\Godot\app_userdata\Threadstorm\</code>
+              <p style="margin-top:10px;">Erstelle dir ein manuelles Backup dieses Ordners vor jedem größeren Update. Im Verlustfall bitte sofort melden – wir prüfen Wiederherstellungsmöglichkeiten.</p>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ── BUG REPORT ── -->
+    <section id="bugreport" aria-labelledby="bug-title">
+      <p class="section-label">Bug Report</p>
+      <h2 class="section-title" id="bug-title">Einen Bug <span class="accent">melden</span></h2>
+
+      <div class="bug-steps">
+        <div class="bug-step">
+          <div class="step-num">1</div>
+          <div class="step-content">
+            <h3>Reproduzierbarkeit prüfen</h3>
+            <p>Versuche den Bug 2–3 Mal zu reproduzieren. Notiere dir: Unter welchen Umständen tritt er auf? (Map, Spieleranzahl, spezifische Aktion)</p>
+          </div>
+        </div>
+
+        <div class="bug-step">
+          <div class="step-num">2</div>
+          <div class="step-content">
+            <h3>Log-Datei sammeln</h3>
+            <p>Die wichtigste Datei für uns ist das Godot-Ausgabe-Log. Direkt nach dem Bug kopiere es hier:</p>
+            <code>%APPDATA%\Godot\app_userdata\Threadstorm\logs\godot.log</code>
+          </div>
+        </div>
+
+        <div class="bug-step">
+          <div class="step-num">3</div>
+          <div class="step-content">
+            <h3>Systeminfo exportieren</h3>
+            <p>Öffne ingame <strong>Einstellungen → System → Diagnose exportieren</strong>. Dies erstellt eine <code>sysinfo.json</code> im Installationsordner mit GPU, OS, RAM und Godot-Version – ideal als Bug-Anhang.</p>
+          </div>
+        </div>
+
+        <div class="bug-step">
+          <div class="step-num">4</div>
+          <div class="step-content">
+            <h3>Crash-Dumps (bei Abstürzen)</h3>
+            <p>Bei einem Hard-Crash erstellt Windows einen Dump. Diesen findest du unter:</p>
+            <code>%LOCALAPPDATA%\CrashDumps\Threadstorm.exe.*.dmp</code>
+          </div>
+        </div>
+
+        <div class="bug-step">
+          <div class="step-num">5</div>
+          <div class="step-content">
+            <h3>Report abschicken</h3>
+            <p>Packe Log + Sysinfo in eine ZIP-Datei und erstelle einen Report – entweder im GitHub Issues-Tracker oder direkt im Discord im <strong>#bug-reports</strong> Kanal mit dem Tag <code>[BUG]</code>.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="bug-cta">
+        <a href="#" class="btn btn-pink">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          Bug auf GitHub melden
+        </a>
+      </div>
+    </section>
+
+    <!-- ── COMMUNITY ── -->
+    <section id="community" aria-labelledby="community-title">
+      <p class="section-label">Kontakt</p>
+      <h2 class="section-title" id="community-title">Community &amp; <span class="accent">Kontakt</span></h2>
+
+      <div class="community-grid community-grid--single">
+        <div class="community-card">
+          <div class="card-icon">💬</div>
+          <h3>Steam Community Hub</h3>
+          <p>Im Steam-Forum findest du von der Community gepflegte Guides, bekannte Workarounds für häufige Probleme und kannst Diskussionen durchsuchen.</p>
+          <a href="#" class="btn btn-gold">Steam-Forum öffnen</a>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ── FOOTER ── -->
+  <footer>
+    <p>© 2025 Threadstorm · <a href="#">Datenschutz</a> · <a href="#">Impressum</a></p>
+    <p style="margin-top:6px; font-size:.72rem;">Threadstorm ist in der Godot Engine entwickelt. Godot ist ein eingetragenes Warenzeichen der Godot Foundation.</p>
+  </footer>
+
+</div><!-- .page -->
+
+<script>
+  function toggleFaq(btn) {
+    const item = btn.closest('.faq-item');
+    const isOpen = item.classList.contains('open');
+
+    // Close all
+    document.querySelectorAll('.faq-item.open').forEach(el => {
+      el.classList.remove('open');
+      el.querySelector('.faq-btn').setAttribute('aria-expanded', 'false');
+    });
+
+    // Open clicked (if was closed)
+    if (!isOpen) {
+      item.classList.add('open');
+      btn.setAttribute('aria-expanded', 'true');
+    }
+  }
+</script>
+</body>
+</html>
